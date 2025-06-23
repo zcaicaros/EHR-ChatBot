@@ -1,0 +1,5 @@
+pip install -U langchain langchain_openai langsmith pandas langchain_experimental matplotlib langgraph langchain_core
+pip install PyPDF2
+pip install frontend
+pip install pymupdf
+export OPENAI_API_KEY=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
