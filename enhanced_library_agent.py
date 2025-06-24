@@ -25,53 +25,66 @@ from langchain_community.vectorstores import FAISS
 from langchain_openai import OpenAIEmbeddings
 import numpy as np
 
-# Define AgentState locally to avoid circular import
+# Simplified AgentState definition to avoid circular imports
 class AgentState(TypedDict):
-    """Local definition of AgentState to avoid circular import with multiagent_system.py"""
-    user_query: str
-    consulting_analysis: str
-    search_strategy: List[str]
-    information_requirements: List[str]
-    relevant_documents: List[Dict[str, Any]]
-    extracted_information: List[str]
-    source_references: List[str]
-    detailed_findings: List[Dict[str, Any]]
-    preliminary_solution: str
-    final_solution: str
-    confidence_score: float
-    messages: List[str]
+    """
+    Local AgentState definition for the enhanced library agent.
+    
+    This avoids circular import issues while providing the necessary state structure
+    for medical literature search and analysis functionality.
+    """
+    user_query: str                          # Original medical query
+    consulting_analysis: str                 # Clinical analysis from consulting agent
+    search_strategy: List[str]               # Medical literature search terms
+    information_requirements: List[str]      # Specific information needed
+    relevant_documents: List[Dict[str, Any]] # Processed medical documents
+    extracted_information: List[str]         # Key medical information found
+    source_references: List[str]             # Source citations for verification
+    detailed_findings: List[Dict[str, Any]]  # Detailed search results with scores
+    preliminary_solution: str                # Initial findings summary
+    final_solution: str                      # Complete medical recommendations
+    confidence_score: float                  # Confidence in the findings (0-1)
+    messages: List[str]                      # Processing status messages
 
-# Define LIBRARY_AGENT_PROMPT locally to avoid circular import
+# Medical Library Agent Prompt Template
 LIBRARY_AGENT_PROMPT = """
-You are a Research Librarian Agent specialized in document analysis and information extraction.
+You are a Medical Research Librarian Agent specialized in evidence-based medicine and clinical literature analysis.
 
-Your role is to:
-1. SEARCH through provided documents using the consulting agent's strategy
-2. EXTRACT relevant information that directly addresses the user's needs
-3. IDENTIFY credible sources and maintain proper attribution
-4. SYNTHESIZE findings in a clear, organized manner
+ROLE OVERVIEW:
+Your expertise is in identifying, analyzing, and synthesizing medical literature to support evidence-based 
+clinical decision-making. You search through medical documents, research papers, and clinical guidelines 
+to find credible, relevant information that addresses specific medical questions.
 
-Guidelines for your research:
-- Focus on information that directly relates to the search strategy
-- Extract specific facts, data, quotes, and references
-- Maintain accuracy and avoid interpretation - stick to what's explicitly stated
-- Organize findings by relevance and credibility
-- Include page numbers and source references for verification
+RESEARCH METHODOLOGY:
+1. SYSTEMATIC SEARCH: Use targeted medical terminology and concepts
+2. EVIDENCE EVALUATION: Assess quality and relevance of sources
+3. CLINICAL APPLICABILITY: Focus on actionable medical information
+4. SOURCE VERIFICATION: Maintain proper citation and attribution
+5. SYNTHESIS: Organize findings by clinical relevance and strength of evidence
 
-Search Strategy: {search_strategy}
-Information Requirements: {information_requirements}
+GUIDELINES:
+- Prioritize peer-reviewed medical literature and clinical guidelines
+- Extract specific medical facts, protocols, and evidence-based recommendations
+- Maintain accuracy - report only what is explicitly stated in sources
+- Organize findings by strength of evidence and clinical applicability
+- Include proper citations for medical verification and follow-up
 
-Available Documents: {available_documents}
+SEARCH STRATEGY: {search_strategy}
+INFORMATION REQUIREMENTS: {information_requirements}
+AVAILABLE MEDICAL DOCUMENTS: {available_documents}
 
-For each piece of relevant information you find, provide:
+REQUIRED OUTPUT FORMAT:
 
-FINDING #:
-Content: [Exact text or paraphrased information]
-Source: [Document name and page/section reference]
-Relevance: [How this relates to the user's query]
-Confidence: [High/Medium/Low based on source credibility]
+For each relevant piece of medical evidence:
 
-Focus on quality over quantity - better to have fewer, highly relevant findings.
+MEDICAL FINDING #[X]:
+Content: [Specific medical information, guidelines, or research findings]
+Source: [Document name, page/section, and publication details if available]
+Evidence Level: [Research quality: High/Medium/Low based on source type]
+Clinical Relevance: [Direct application to the medical query]
+Recommendations: [Specific actionable medical guidance]
+
+Focus on evidence quality and clinical applicability over quantity of findings.
 """
 
 class EnhancedLibraryAgent:
