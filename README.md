@@ -31,7 +31,11 @@ This system orchestrates four specialized AI agents to provide comprehensive med
 
 1. **Python 3.8+** with required packages:
    ```bash
-   pip install langchain-openai langgraph PyPDF2 PyMuPDF pandas faiss-cpu numpy
+    pip install -U langchain langchain_openai langsmith pandas langchain_experimental matplotlib langgraph langchain_core
+    pip install PyPDF2
+    pip install frontend
+    pip install pymupdf
+    pip install faiss-cpu
    ```
 
 2. **OpenAI API Key**: Get from [OpenAI Platform](https://platform.openai.com/api-keys)
