@@ -6,17 +6,16 @@ An intelligent multi-agent system that combines patient data analysis with medic
 
 This system orchestrates four specialized AI agents to provide comprehensive medical consultations:
 
-```
-┌─────────────────┐    ┌──────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│ Consulting      │    │ Patient Agent    │    │ Library Agent    │    │ Solution Agent  │
-│ Agent           │───▶│ (Patient Data)   │───▶│ (Medical Lit)    │───▶│ (Synthesis)     │
-│ (Analysis &     │    │                  │    │                  │    │                 │
-│ Strategy)       │    └──────────────────┘    └──────────────────┘    └─────────────────┘
-└─────────────────┘              │                       │                       │
-                                 │                       │                       │
-                            Extracts patient        Searches medical         Combines both sources
-                            medical records         literature & PDFs        for final recommendations
-```
+![](./20250626-111841.jpeg)
+![](./20250626-132835.jpeg)
+
+
+### Challenges I have faced
+1. Long PDF doc: chunking-based RAG technique
+2. Long patient records: intelligent data extraction using LLM: LLM determine which key to find, then calling a fun to extract record directly, without the requirement of scanning all patient json. (Improvement: better context retrieval method)
+3. Consultant agent lack of domain knowledge: RAG as external knowledge
+
+
 
 ### 🎯 Key Features
 
@@ -31,11 +30,14 @@ This system orchestrates four specialized AI agents to provide comprehensive med
 
 1. **Python 3.8+** with required packages:
    ```bash
+    /usr/bin/python3 -m venv ./
+    source ./bin/activate
     pip install -U langchain langchain_openai langsmith pandas langchain_experimental matplotlib langgraph langchain_core
     pip install PyPDF2
     pip install frontend
     pip install pymupdf
     pip install faiss-cpu
+    export OPENAI_API_KEY=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
    ```
 
 2. **OpenAI API Key**: Get from [OpenAI Platform](https://platform.openai.com/api-keys)

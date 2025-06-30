@@ -5,17 +5,6 @@ Multi-Agent Medical Consultation System
 An intelligent multi-agent system that combines patient data analysis with medical literature research
 to provide comprehensive medical insights and recommendations.
 
-System Architecture:
-┌─────────────────┐    ┌──────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│ Consulting      │    │ Patient Agent    │    │ Library Agent    │    │ Solution Agent  │
-│ Agent           │───▶│ (Patient Data)   │───▶│ (Medical Lit)    │───▶│ (Synthesis)     │
-│ (Analysis &     │    │                  │    │                  │    │                 │
-│ Strategy)       │    └──────────────────┘    └──────────────────┘    └─────────────────┘
-└─────────────────┘              │                       │                       │
-                                 │                       │                       │
-                            Extracts patient        Searches medical         Combines both sources
-                            medical records         literature & PDFs        for final recommendations
-
 Key Features:
 - Natural language query processing for medical questions
 - Patient-specific data extraction and analysis  
@@ -64,8 +53,10 @@ class AgentState(TypedDict):
     # ---- Consulting Agent Results ----
     # Strategic analysis and planning phase
     consulting_analysis: str                 # Deep analysis of user needs and context
-    search_strategy: List[str]               # Specific search terms for medical literature
+    initial_search_strategy: List[str]       # Initial search terms for domain knowledge
+    search_strategy: List[str]               # Updated search terms for medical literature
     patient_queries: List[str]               # Specific questions about patient data
+    domain_knowledge: List[str]              # Domain knowledge gathered from library
     
     # ---- Patient Agent Results ----  
     # Patient-specific medical data and analysis
@@ -357,13 +348,13 @@ class MultiAgentSystem:
         """
         Build the medical consultation workflow using LangGraph.
         
-        Creates a sequential workflow that mirrors clinical consultation:
-        Consulting Analysis → Patient Data Review → Literature Research → Clinical Recommendations
+        Creates a new workflow where the Consulting Agent first gathers domain knowledge:
+        Initial Analysis → Domain Knowledge Gathering → Updated Strategy → Patient Data → Final Recommendations
         
-        This sequential approach ensures:
-        - No data conflicts between parallel agents
-        - Each agent has complete context from previous steps
-        - Information builds progressively toward comprehensive recommendations
+        This approach ensures:
+        - Consulting Agent gets domain knowledge before determining patient data needs
+        - More informed decision-making about what patient information to gather
+        - Sequential flow with the Consulting Agent as the central coordinator
         
         Returns:
             StateGraph: Configured medical consultation workflow
@@ -372,122 +363,230 @@ class MultiAgentSystem:
         workflow = StateGraph(AgentState)
         
         # Add each specialized medical agent
-        workflow.add_node("consulting_agent", self.consulting_agent)
-        workflow.add_node("patient_agent", self.patient_agent)
+        workflow.add_node("consulting_agent_initial", self.consulting_agent_initial)
         workflow.add_node("library_agent", self.library_agent)
+        workflow.add_node("consulting_agent_updated", self.consulting_agent_updated)
+        workflow.add_node("patient_agent", self.patient_agent)
         workflow.add_node("solution_agent", self.solution_agent)
         
-        # Define intelligent routing based on medical consultation needs
-        def route_after_consulting(state: AgentState):
-            """Route to patient data analysis if patient-specific queries exist, otherwise to literature search."""
+        # Define routing logic for the new workflow
+        def route_after_updated_consulting(state: AgentState):
+            """
+            Route to patient agent only if patient-specific queries exist and are not 'None'.
+            This handles both cases:
+            1. General medical questions that don't need patient data (even with patient ID)
+            2. Patient-specific questions that require medical records
+            """
             patient_queries = state.get("patient_queries", [])
-            search_strategy = state.get("search_strategy", [])
             
-            # Priority: Patient data first (clinical information), then literature research
-            if patient_queries and any(q.lower() != "none" for q in patient_queries):
+            # Check if there are meaningful patient queries (not empty and not "None")
+            has_patient_queries = (
+                patient_queries and 
+                len(patient_queries) > 0 and 
+                any(q.strip().lower() not in ["none", ""] for q in patient_queries)
+            )
+            
+            if has_patient_queries:
+                print(f"   → Routing to Patient Agent: Found {len(patient_queries)} patient-specific queries")
                 return "patient_agent"
-            elif search_strategy and any(s.lower() != "none" for s in search_strategy):
-                return "library_agent"
             else:
+                print("   → Routing to Solution Agent: No patient-specific data needed")
                 return "solution_agent"
         
-        def route_after_patient(state: AgentState):
-            """Route to literature search if needed, otherwise proceed to clinical recommendations."""
-            search_strategy = state.get("search_strategy", [])
-            
-            if search_strategy and any(s.lower() != "none" for s in search_strategy):
-                return "library_agent"
-            else:
-                return "solution_agent"
+        # Configure the new medical consultation workflow
+        # Sequential flow: Consulting → Library → Consulting (Updated) → Patient (if needed) → Solution
+        workflow.add_edge("consulting_agent_initial", "library_agent")
+        workflow.add_edge("library_agent", "consulting_agent_updated")
         
-        # Configure the medical consultation workflow routing
         workflow.add_conditional_edges(
-            "consulting_agent",
-            route_after_consulting,
+            "consulting_agent_updated",
+            route_after_updated_consulting,
             {
                 "patient_agent": "patient_agent",
-                "library_agent": "library_agent", 
                 "solution_agent": "solution_agent"
             }
         )
         
-        workflow.add_conditional_edges(
-            "patient_agent",
-            route_after_patient,
-            {
-                "library_agent": "library_agent",
-                "solution_agent": "solution_agent"
-            }
-        )
-        
-        # Final routing to clinical recommendations
-        workflow.add_edge("library_agent", "solution_agent")
+        workflow.add_edge("patient_agent", "solution_agent")
         workflow.add_edge("solution_agent", END)
         
-        # Start with clinical analysis
-        workflow.set_entry_point("consulting_agent")
+        # Start with initial clinical analysis
+        workflow.set_entry_point("consulting_agent_initial")
         
         return workflow.compile()
     
-    def consulting_agent(self, state: AgentState) -> AgentState:
+    def consulting_agent_initial(self, state: AgentState) -> AgentState:
         """
-        Consulting Agent: Senior Medical Analyst
+        Initial Consulting Agent: Senior Medical Analyst - Initial Analysis
         
-        Analyzes medical queries like a senior physician would approach a complex case:
-        - Understands clinical context and identifies key decision points
-        - Determines what patient data is needed for clinical assessment
-        - Plans literature search strategy for evidence-based recommendations
-        - Routes query to appropriate specialized analysis
+        Performs initial analysis of medical queries to understand context and identify 
+        what domain knowledge is needed from medical literature before determining 
+        specific patient data requirements.
         
-        This agent acts as the "attending physician" who guides the overall consultation approach.
+        This agent acts as the "attending physician" who first gathers medical context.
         
         Args:
             state (AgentState): Current consultation state with user query
             
         Returns:
-            AgentState: Updated state with clinical analysis and information gathering strategy
+            AgentState: Updated state with initial analysis and domain knowledge search strategy
         """
-        print("🩺 Consulting Agent: Analyzing medical query and developing clinical strategy...")
+        print("🩺 Consulting Agent (Initial): Analyzing medical query for domain knowledge needs...")
         
-        # Prepare medical consultation prompt with clinical context
-        prompt = CONSULTING_AGENT_PROMPT.format(
-            user_query=state["user_query"],
-            patient_id=state.get("patient_id", "Not provided")
-        )
+        # Prepare initial analysis prompt focusing on domain knowledge needs
+        initial_prompt = f"""
+You are a Senior Medical Consulting Agent performing initial analysis of a medical query.
+
+Your task is to:
+1. Understand the medical context and complexity of the query
+2. Identify what domain knowledge from medical literature would be helpful
+3. DO NOT determine patient data needs yet - that comes after gathering domain knowledge
+
+USER QUERY: {state["user_query"]}
+PATIENT ID: {state.get("patient_id", "Not provided")}
+
+REQUIRED OUTPUT FORMAT:
+
+INITIAL ANALYSIS:
+[Provide analysis of the medical query including:
+- Medical context and significance
+- Key medical concepts involved
+- Clinical complexity level]
+
+DOMAIN KNOWLEDGE NEEDED:
+[List 2-4 specific areas where medical literature knowledge would help understand this query better, such as:
+- Treatment guidelines for specific conditions
+- Diagnostic criteria and protocols  
+- Drug mechanisms and interactions
+- Clinical research on specific topics
+Write "None" if no domain knowledge is needed]
+
+Focus on what background medical knowledge would help inform the analysis.
+"""
         
-        # Get clinical analysis from the AI physician
-        messages = [SystemMessage(content=prompt)]
+        # Get initial analysis from the AI physician
+        messages = [SystemMessage(content=initial_prompt)]
         response = self.llm.invoke(messages)
         response_text = response.content
         
-        # Parse the structured medical analysis response
-        # Extract clinical analysis
-        analysis_match = re.search(r'ANALYSIS:\s*(.*?)\s*PATIENT QUERIES:', response_text, re.DOTALL)
+        # Parse the initial analysis response
+        analysis_match = re.search(r'INITIAL ANALYSIS:\s*(.*?)\s*DOMAIN KNOWLEDGE NEEDED:', response_text, re.DOTALL)
         analysis = analysis_match.group(1).strip() if analysis_match else response_text
         
+        # Extract domain knowledge search strategy
+        domain_match = re.search(r'DOMAIN KNOWLEDGE NEEDED:\s*(.*?)$', response_text, re.DOTALL)
+        initial_search_strategy = []
+        if domain_match:
+            domain_text = domain_match.group(1).strip()
+            if domain_text.lower() != "none":
+                initial_search_strategy = [item.strip() for item in domain_text.split('\n') if item.strip()]
+        
+        # Update consultation state with initial analysis
+        state["consulting_analysis"] = analysis
+        state["initial_search_strategy"] = initial_search_strategy
+        state["search_strategy"] = initial_search_strategy  # Use same strategy for library agent
+        
+        # Track consultation progress
+        state["messages"].append(f"Initial Consulting Agent completed analysis at {datetime.now()}")
+        
+        return state
+
+    def consulting_agent_updated(self, state: AgentState) -> AgentState:
+        """
+        Updated Consulting Agent: Senior Medical Analyst - Strategy Update
+        
+        Uses domain knowledge gathered from medical literature to make informed decisions
+        about what specific patient data is needed to answer the medical query.
+        
+        This agent acts as the "attending physician" who now has medical context to
+        determine specific patient information requirements.
+        
+        Args:
+            state (AgentState): Current consultation state with domain knowledge
+            
+        Returns:
+            AgentState: Updated state with specific patient data requirements
+        """
+        print("🩺 Consulting Agent (Updated): Determining patient data needs based on domain knowledge...")
+        
+        # Prepare updated analysis prompt with domain knowledge
+        domain_knowledge_summary = ""
+        if state.get("extracted_information"):
+            domain_knowledge_summary = "\n".join(state["extracted_information"])
+        else:
+            domain_knowledge_summary = "No specific domain knowledge was gathered."
+        
+        updated_prompt = f"""
+You are a Senior Medical Consulting Agent with domain knowledge from medical literature.
+
+Your task is to:
+1. Review the domain knowledge gathered from medical literature
+2. Determine if the original query requires patient-specific information or can be answered with general medical knowledge
+3. If patient data is needed, formulate specific patient data queries based on this knowledge
+
+CRITICAL: Even if a patient ID is provided, if the query is asking about general medical knowledge (like "What are the side effects of aspirin?" or "How does diabetes affect the heart?"), then NO patient data is needed. Only ask for patient data if the query specifically needs information about that particular patient.
+
+ORIGINAL QUERY: {state["user_query"]}
+PATIENT ID: {state.get("patient_id", "Not provided")}
+
+INITIAL ANALYSIS: {state["consulting_analysis"]}
+
+DOMAIN KNOWLEDGE GATHERED:
+{domain_knowledge_summary}
+
+REQUIRED OUTPUT FORMAT:
+
+UPDATED ANALYSIS:
+[Update your analysis based on the domain knowledge gathered, including:
+- Whether this query requires patient-specific data or can be answered with general medical knowledge
+- How the domain knowledge informs understanding of the query
+- Key clinical decision points now identified
+- Specific information gaps that need patient data (if any)]
+
+PATIENT QUERIES:
+[ONLY if the query requires patient-specific information, list 2-4 specific, focused questions about patient data needed, such as:
+- Current medications and potential interactions
+- Relevant diagnostic results and trends  
+- Medical history pertinent to the query
+- Current treatment status and outcomes
+
+Write "None" if:
+- The query is asking for general medical information
+- The query can be fully answered with the domain knowledge gathered
+- No patient-specific data is required to answer the question]
+
+Examples:
+- "What are the side effects of metformin?" → Patient Queries: None (general question)
+- "Is metformin safe for this patient?" → Patient Queries: Current medications, kidney function, etc. (patient-specific)
+- "How is diabetes treated?" → Patient Queries: None (general question)  
+- "How should we adjust this patient's diabetes treatment?" → Patient Queries: Current medications, HbA1c levels, etc. (patient-specific)
+"""
+        
+        # Get updated analysis from the AI physician
+        messages = [SystemMessage(content=updated_prompt)]
+        response = self.llm.invoke(messages)
+        response_text = response.content
+        
+        # Parse the updated analysis response
+        updated_analysis_match = re.search(r'UPDATED ANALYSIS:\s*(.*?)\s*PATIENT QUERIES:', response_text, re.DOTALL)
+        if updated_analysis_match:
+            updated_analysis = updated_analysis_match.group(1).strip()
+            # Append to existing analysis
+            state["consulting_analysis"] += f"\n\nUPDATED WITH DOMAIN KNOWLEDGE:\n{updated_analysis}"
+        
         # Extract patient-specific queries
-        patient_queries_match = re.search(r'PATIENT QUERIES:\s*(.*?)\s*LIBRARY SEARCH STRATEGY:', response_text, re.DOTALL)
+        patient_queries_match = re.search(r'PATIENT QUERIES:\s*(.*?)$', response_text, re.DOTALL)
         patient_queries = []
         if patient_queries_match:
             queries_text = patient_queries_match.group(1).strip()
             if queries_text.lower() != "none":
                 patient_queries = [item.strip() for item in queries_text.split('\n') if item.strip()]
         
-        # Extract medical literature search strategy
-        strategy_match = re.search(r'LIBRARY SEARCH STRATEGY:\s*(.*?)$', response_text, re.DOTALL)
-        search_strategy = []
-        if strategy_match:
-            strategy_text = strategy_match.group(1).strip()
-            if strategy_text.lower() != "none":
-                search_strategy = [item.strip() for item in strategy_text.split('\n') if item.strip()]
-        
-        # Update consultation state with clinical strategy
-        state["consulting_analysis"] = analysis
+        # Update consultation state with patient requirements
         state["patient_queries"] = patient_queries
-        state["search_strategy"] = search_strategy
         
         # Track consultation progress
-        state["messages"].append(f"Consulting Agent completed clinical analysis at {datetime.now()}")
+        state["messages"].append(f"Updated Consulting Agent completed strategy update at {datetime.now()}")
         
         return state
 
@@ -741,8 +840,10 @@ class MultiAgentSystem:
             user_query=user_query,
             patient_id=patient_id or "",
             consulting_analysis="",
+            initial_search_strategy=[],
             search_strategy=[],
             patient_queries=[],
+            domain_knowledge=[],
             relevant_documents=[],
             extracted_information=[],
             source_references=[],
@@ -763,87 +864,3 @@ class MultiAgentSystem:
         print("✅ Medical consultation completed successfully!")
         
         return final_state
-
-# ============================================================================
-# EXAMPLE MEDICAL CONSULTATION USAGE
-# ============================================================================
-
-def main():
-    """
-    Example usage of the Multi-Agent Medical Consultation System.
-    
-    Demonstrates how to:
-    1. Initialize the system with medical credentials and patient data
-    2. Process different types of medical queries (patient-specific and general)
-    3. Integrate medical literature search with patient data analysis
-    4. Display comprehensive medical consultation results
-    """
-    # Initialize system with OpenAI credentials
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        print("❌ Please set your OPENAI_API_KEY environment variable")
-        print("   Example: export OPENAI_API_KEY='your-api-key-here'")
-        return
-    
-    # Create the medical consultation system
-    system = MultiAgentSystem(api_key, patients_json_path='./patients.json')
-    
-    # Example medical literature documents
-    medical_documents = [
-        "./ehab368.pdf"  # Replace with actual medical literature paths
-    ]
-    
-    # Example 1: Patient-specific medical consultation
-    print("\n" + "=" * 80)
-    print("EXAMPLE 1: PATIENT-SPECIFIC MEDICAL CONSULTATION")
-    print("=" * 80)
-    
-    patient_query = "What are the cardiovascular risk factors for this patient based on their current medications and medical history?"
-    patient_id = "p_001"  # Replace with actual patient ID from your data
-    
-    results1 = system.process_medical_query(
-        user_query=patient_query,
-        patient_id=patient_id,
-        pdf_documents=medical_documents
-    )
-    
-    # Display consultation results
-    print(f"\n🔍 Medical Query: {results1['user_query']}")
-    print(f"👤 Patient ID: {results1['patient_id']}")
-    print(f"\n📋 Clinical Analysis:\n{results1['consulting_analysis']}")
-    if results1.get('patient_queries'):
-        print(f"\n🩺 Patient Data Queries: {results1['patient_queries']}")
-    if results1.get('search_strategy'):
-        print(f"\n📚 Literature Search Strategy: {results1['search_strategy']}")
-    print(f"\n🏥 Medical Recommendations:\n{results1['final_solution']}")
-    print(f"\n📊 Clinical Confidence: {results1['confidence_score']:.1%}")
-    
-    # Example 2: General medical research query
-    print("\n" + "=" * 80)
-    print("EXAMPLE 2: GENERAL MEDICAL RESEARCH CONSULTATION")
-    print("=" * 80)
-    
-    research_query = "What are the latest evidence-based treatment protocols for acute heart failure management?"
-    
-    results2 = system.process_medical_query(
-        user_query=research_query,
-        patient_id=None,
-        pdf_documents=medical_documents
-    )
-    
-    print(f"\n🔍 Medical Query: {results2['user_query']}")
-    print(f"\n📋 Clinical Analysis:\n{results2['consulting_analysis']}")
-    if results2.get('search_strategy'):
-        print(f"\n📚 Literature Search Strategy: {results2['search_strategy']}")
-    print(f"\n🏥 Evidence-Based Recommendations:\n{results2['final_solution']}")
-    print(f"\n📊 Clinical Confidence: {results2['confidence_score']:.1%}")
-    
-    print("\n" + "=" * 80)
-    print("✅ Medical consultation system demonstration completed!")
-    print("   Ready for clinical use with appropriate medical oversight.")
-
-# For backwards compatibility - alias the main method
-process_query = lambda self, *args, **kwargs: self.process_medical_query(*args, **kwargs)
-
-if __name__ == "__main__":
-    main() 

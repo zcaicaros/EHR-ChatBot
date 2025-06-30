@@ -104,42 +104,42 @@ def main():
     except Exception as e:
         print(f"❌ Error in patient consultation: {e}")
     
-    # print("\n" + "=" * 70)
-    # print("📚 EXAMPLE 2: GENERAL MEDICAL RESEARCH QUERY")
-    # print("=" * 70)
+    print("\n" + "=" * 70)
+    print("📚 EXAMPLE 2: GENERAL MEDICAL RESEARCH QUERY")
+    print("=" * 70)
     
-    # # Example 2: General medical research
-    # research_query = """
-    # What are the latest evidence-based guidelines for managing 
-    # acute heart failure in elderly patients?
-    # """
+    # Example 2: General medical research
+    research_query = """
+    What are the latest evidence-based guidelines for managing 
+    acute heart failure in elderly patients?
+    """
     
-    # try:
-    #     print(f"🔍 Processing Query: {research_query.strip()}")
-    #     print("⏳ Running literature analysis...")
+    try:
+        print(f"🔍 Processing Query: {research_query.strip()}")
+        print("⏳ Running literature analysis...")
         
-    #     result = system.process_medical_query(
-    #         user_query=research_query,
-    #         patient_id=None,  # No specific patient
-    #         pdf_documents=medical_literature
-    #     )
+        result = system.process_medical_query(
+            user_query=research_query,
+            patient_id=None,  # No specific patient
+            pdf_documents=medical_literature
+        )
         
-    #     # Display results
-    #     print(f"\n📊 RESEARCH RESULTS:")
-    #     print(f"Clinical Confidence: {result['confidence_score']:.1%}")
+        # Display results
+        print(f"\n📊 RESEARCH RESULTS:")
+        print(f"Clinical Confidence: {result['confidence_score']:.1%}")
         
-    #     if result.get('search_strategy'):
-    #         print(f"📚 Literature Topics Researched: {result['search_strategy']}")
+        if result.get('search_strategy'):
+            print(f"📚 Literature Topics Researched: {result['search_strategy']}")
         
-    #     print(f"\n🏥 EVIDENCE-BASED RECOMMENDATIONS:")
-    #     recommendations = result['final_solution']
-    #     if len(recommendations) > 500:
-    #         print(recommendations[:500] + "\n... [truncated for display]")
-    #     else:
-    #         print(recommendations)
+        print(f"\n🏥 EVIDENCE-BASED RECOMMENDATIONS:")
+        recommendations = result['final_solution']
+        if len(recommendations) > 500:
+            print(recommendations[:500] + "\n... [truncated for display]")
+        else:
+            print(recommendations)
             
-    # except Exception as e:
-    #     print(f"❌ Error in research query: {e}")
+    except Exception as e:
+        print(f"❌ Error in research query: {e}")
     
     print("\n" + "=" * 70)
     print("💡 USAGE TIPS")
